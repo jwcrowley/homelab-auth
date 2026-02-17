@@ -161,21 +161,67 @@ You **MUST** configure your public domain in `cluster/networking/netbird.yaml`.
 *   Cilium installed as CNI.
 *   Helm & ArgoCD.
 
-### Deployment
+### Deployment Guide
 
-The stack is managed via GitOps (ArgoCD).
+This stack is managed via a GitOps "App-of-Apps" pattern using ArgoCD.
 
-1.  **Bootstrap Infrastructure**:
-    Apply the infrastructure applications first.
-    ```bash
-    kubectl apply -f infra/
-    ```
+### 1. Prerequisites
 
-2.  **Deploy Security Services**:
-    Once infra is healthy, deploy the security layer.
-    ```bash
-    kubectl apply -f security/
-    ```
+Before bootstrapping, ensure your cluster has:
+*   **CNI**: [Cilium](https://cilium.io/) installed and healthy (required for Tetragon).
+*   **Storage**: A default storage class configured (e.g., Local Path Provisioner, Longhorn) for Postgres.
+*   **Secrets**:
+    *   **SOPS**: An age/PGP key for decrypting repository secrets.
+    *   **Cloudflare**: A `cloudflared-token` in the `infra` namespace:
+      ```bash
+      kubectl create secret generic cloudflared-token --namespace infra --from-literal=token=<token>
+      ```
+
+### 2. Bootstrapping (Stage 1)
+
+Apply the foundational namespaces and the root ArgoCD application:
+
+```bash
+# 1. Create the base namespaces
+kubectl apply -f cluster/infra/namespaces.yaml
+
+# 2. Deploy the root ArgoCD application
+kubectl apply -f cluster/infra/argocd-apps.yaml
+```
+
+This will automatically deploy:
+*   `cert-manager` (for automated TLS)
+*   `cloudnative-pg` (Postgres operator)
+*   `external-secrets` (if using vault/asm/etc.)
+
+### 3. Deploying the Stack (Stage 2)
+
+Once the core infrastructure is healthy, apply the remaining stack layers:
+
+```bash
+# Deploy Infra (SPIRE, Tetragon)
+kubectl apply -k cluster/infra/
+
+# Deploy Security (Authentik, Policies)
+kubectl apply -k cluster/security/
+
+# Deploy Networking (Netbird, Ingress)
+kubectl apply -k cluster/networking/
+```
+
+### 4. Post-Deployment Configuration
+
+1.  **Netbird Domain**: Edit `cluster/networking/netbird.yaml` and set your public domain.
+2.  **Hybrid Networking**: Forward UDP Port `3478` on your router to the cluster LoadBalancer IP for Netbird Relay performance.
+3.  **Trust Domain**: Ensure your SPIRE trust domain (`homelab.internal`) matches in `infra/spire/rotation-config.yaml`.
+
+## Verification
+
+Monitor the deployment in the ArgoCD UI or via CLI:
+```bash
+kubectl get pods -A
+kubectl get tracingpolicy -A
+```
 
 ## Usage Guides
 
