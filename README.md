@@ -1,6 +1,13 @@
 # Homelab Production Identity Stack (v5)
 
-This repository contains the configuration for a production-grade identity and security stack for a Kubernetes homelab. It integrates user identity (Authentik), workload identity (SPIRE), and runtime enforcement (Tetragon/Cilium).
+This repository contains the configuration for a production-grade identity and security stack for a Kubernetes homelab.
+
+## Design Philosophy
+
+This stack is built on three core pillars:
+1.  **Zero Trust Networking**: No pod is trusted by default. All access (user and machine) must be authenticated and authorized.
+2.  **Identity-at-Source**: Identities are issued based on cryptographic attestation (SPIRE) or strong MFA (Authentik), not just IP addresses or network location.
+3.  **Kernel-Level Enforcement**: We move security checks into the Linux Kernel (eBPF) to prevent user-space bypass and ensure high-performance enforcement.
 
 ## Architecture Overview
 
@@ -48,6 +55,9 @@ Authentik is deployed via ArgoCD and handles user authentication.
 *   **Database**: Uses CloudNativePG (`security/database`).
 *   **Ingress**: protect services via Traefik middleware or forward auth.
 
+> [!TIP]
+> **Why Authentik?**: We centralize identity to ensure a consistent security posture (MFA, password policies, and audit logging) across every single application in the lab, whether they natively support OIDC or not.
+
 ### Workload Identity (SPIRE)
 
 Located in: `infra/spire`
@@ -57,6 +67,9 @@ SPIRE issues identities to workloads based on k8s selectors.
     *   **Note**: This is an separate internal logical identifier for SPIFFE IDs (e.g., `spiffe://homelab.internal/ns/default/sa/my-app`). It does **NOT** need to be a real DNS domain or public domain. It is an arbitrary string that defines the security boundary of the mesh.
 *   **Agent**: Runs as a DaemonSet on every node.
 *   **Server**: Central authority for minting SVIDs.
+
+> [!IMPORTANT]
+> **Why SPIRE?**: Static secrets (API keys, long-lived tokens) are a liability. SPIRE issues **short-lived, auto-rotating identities (SVIDs)**. If a pod is compromised, the "blast radius" is limited to minutes, and the identity cannot be used outside the cluster.
 
 **Key Features:**
 *   Automated certificate rotation (`rotation-config.yaml`).
@@ -88,6 +101,9 @@ Located in: `infra/tetragon`
 Tetragon provides deep visibility and enforcement.
 *   **Policies**: Defined in `security/policies/tetragon/block-shell.yaml`.
 *   **Enforcement**: Can sigkill processes that violate policies (e.g., unexpected shell execution).
+
+> [!CAUTION]
+> **Why Tetragon?**: Traditional security tools often rely on "poking" logs or user-space agents that can be bypassed. By using **eBPF**, Tetragon observes and blocks malicious activity (like `execve` calls) directly in the kernel, making it nearly impossible for an attacker to hide their tracks.
 
 ```mermaid
 flowchart LR
@@ -158,6 +174,9 @@ graph TD
     *   **Security Benefit**: You do **NOT** need to open any inbound TCP ports (like 443) on your router.
     *   **Features**: Control traffic (Dashboard, Management API, Signal) is proxied securely, hiding your public IP and providing DDoS protection.
 *   **Data Plane (UDP Port Forwarding)**: Netbird uses WireGuard for peer-to-peer traffic. If peers cannot connect directly, they use the **Relay (TURN)** server on UDP port 3478. Because standard Cloudflare Tunnels do not support the low-latency UDP performance required for a VPN relay, this connection stays direct. You **MUST** forward UDP port 3478 on your router.
+
+> [!NOTE]
+> **Why Hybrid?**: This model balances **Security** (Cloudflare Tunnel hides your Management UI and Signal brain from the public internet) with **Performance** (Direct UDP ensures your actual VPN data travels as fast as possible without tunnel overhead).
 
 **Configuration Required**:
 You **MUST** configure your public domain in `cluster/networking/netbird.yaml`.
