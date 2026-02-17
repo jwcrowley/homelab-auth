@@ -472,3 +472,26 @@ spec:
 ```
 
 Apply with `kubectl apply -f <policy.yaml>`.
+## Resilience & Reliability
+
+This stack is designed to be a "critical service" backbone for your homelab. It incorporates several features to ensure high availability and data integrity.
+
+### 1. High Availability (HA)
+*   **Quorum-Based Database**: The Authentik database (CNPG) is configured with **3 instances**. This ensures that the cluster can lose one node while maintaining full read/write availability and data consistency.
+*   **Stateless Scaling**: Authentik and SPIRE are designed to be horizontally scalable. For high-traffic or critical environments, we recommend increasing the `replicas` to `2` in their respective Helm values.
+*   **Load Balancing**: Traefik and Cloudflare provide redundant entry points and automatic failover for incoming traffic.
+
+### 2. Self-Healing (GitOps)
+The entire stack is managed by **ArgoCD** with `selfHeal: true`. 
+*   If a configuration is accidentally deleted or drifts, ArgoCD will automatically restore it to the desired state defined in this repository.
+*   If a core component (like the Authentik server) crashes, Kubernetes will automatically restart the pod, and ArgoCD will ensure the surrounding infrastructure stays synced.
+
+### 3. Data Integrity & Backups
+*   **CNPG Failover**: In the event of a primary node failure, CloudNativePG performs an automated failover to a standby node in seconds.
+*   **WAL Archiving**: We recommend configuring a standard S3-compatible bucket for CNPG WAL (Write-Ahead Log) archiving for point-in-time recovery (PITR).
+
+### 4. Zero-Trust Recovery (Break-Glass)
+In the event of a complete SSO lockout:
+1.  **Direct API Access**: Use `kubectl` to interact with the Authentik API directly within the cluster.
+2.  **Emergency User**: Authentik maintains a local bootstrap user that can be used via port-forwarding to the service, bypassing external Ingress.
+3.  **GitOps Override**: You can temporarily disable ArgoCD sync to make rapid manual changes during a disaster recovery scenario.
