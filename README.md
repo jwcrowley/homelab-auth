@@ -129,24 +129,35 @@ To maximize both security and performance, this stack uses a **Hybrid Networking
 
 ```mermaid
 graph TD
-    Peer((Remote Peer)) --> Router[Your Router]
+    Peer((Remote Peer)) --> CFEdge[Cloudflare Edge / Global Network]
     
-    subgraph "Secure Entry (TCP)"
-    Router -->|Tunnel:443| CFTunnel[Cloudflare Tunnel]
-    CFTunnel -->|Proxy| Ingress[Traefik Ingress]
-    Ingress -->|Mgmt/Signal| NetbirdAPI[Netbird Components]
+    subgraph "Your Local Network"
+        Router[Your Router / Firewall]
+        subgraph "Kubernetes Cluster"
+            CFPod[cloudflared Pod]
+            Ingress[Traefik Ingress]
+            NetbirdAPI[Netbird Components]
+            Coturn[Netbird Relay / Coturn]
+        end
     end
     
-    subgraph "High-Speed Data (UDP)"
-    Router -->|Port Forward:3478| Coturn[Netbird Relay / Coturn]
-    end
+    %% Secure Path
+    CFEdge <-->|Outbound Secure Tunnel| CFPod
+    CFPod -->|Proxy| Ingress
+    Ingress -->|Mgmt/Signal| NetbirdAPI
     
-    Peer -.->|Auth & Signaling| CFTunnel
-    Peer -.->|VPN Traffic Relay| Coturn
+    %% Data Path
+    Peer -->|UDP 3478: Port Forward| Router
+    Router -->|UDP| Coturn
+    
+    Peer -.->|Control Plane Traffic| CFEdge
+    Peer -.->|VPN Data Relay| Router
 ```
 
-*   **Management Plane (Cloudflare Tunnel)**: All control traffic (Dashboard, Management API, and gRPC Signal) goes through the Cloudflare Tunnel. This hides your public IP and provides DDoS protection for the "brains" of the network.
-*   **Data Plane (UDP Port Forwarding)**: Netbird uses WireGuard for peer-to-peer traffic. If peers cannot connect directly, they use the **Relay (TURN)** server. This server uses UDP port 3478. Because Cloudflare Tunnel (standard) does not support UDP traffic with the performance required for a VPN, you **MUST** forward UDP port 3478 on your router directly to the cluster. This ensures your VPN remains fast and reliable.
+*   **Management Plane (Cloudflare Tunnel)**: This uses an **Outbound Connection** model. The `cloudflared` pod inside your cluster initiates the connection to Cloudflare's Edge.
+    *   **Security Benefit**: You do **NOT** need to open any inbound TCP ports (like 443) on your router.
+    *   **Features**: Control traffic (Dashboard, Management API, Signal) is proxied securely, hiding your public IP and providing DDoS protection.
+*   **Data Plane (UDP Port Forwarding)**: Netbird uses WireGuard for peer-to-peer traffic. If peers cannot connect directly, they use the **Relay (TURN)** server on UDP port 3478. Because standard Cloudflare Tunnels do not support the low-latency UDP performance required for a VPN relay, this connection stays direct. You **MUST** forward UDP port 3478 on your router.
 
 **Configuration Required**:
 You **MUST** configure your public domain in `cluster/networking/netbird.yaml`.
