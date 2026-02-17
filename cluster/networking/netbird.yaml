@@ -12,6 +12,43 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: networking
+    helm:
+      values: |
+        # IMPORTANT: You must configure your public domain here.
+        # This domain must resolve to your cluster's LoadBalancer IP.
+        # Since we use Let's Encrypt (http01), this MUST be a real, public domain.
+        #
+        # Example Configuration (verify keys with chart docs):
+        # domain: netbird.example.com
+        # management:
+        #   dnsDomain: netbird.example.com
+        #   ingress:
+        #     enabled: true
+        #     annotations:
+        #       # If using Cloudflare Tunnel to expose the Ingress Controller
+        #       # external-dns.alpha.kubernetes.io/target: <your-tunnel-uuid>.cfargotunnel.com
+        #     hosts:
+        #       - host: netbird.example.com
+        #         paths:
+        #           - path: /
+        # dashboard:
+        #   ingress:
+        #     enabled: true
+        #     hosts:
+        #       - host: netbird.example.com
+        # signal:
+        #   ingress:
+        #     enabled: true
+        #     annotations:
+        #       # GRPC (HTTP2) support is required
+        #       nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+        #     hosts:
+        #       - host: netbird.example.com
+        # dashboard:
+        #   ingress:
+        #     enabled: true
+        #     hosts:
+        #       - host: netbird.example.com
   syncPolicy:
     automated:
       prune: true

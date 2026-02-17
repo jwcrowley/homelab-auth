@@ -1,3 +1,4 @@
 resources:
 - namespaces.yaml
 - argocd-apps.yaml
+- ../../infra/cloudflared/deployment.yaml

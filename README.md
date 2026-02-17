@@ -4,7 +4,27 @@ This repository contains the configuration for a production-grade identity and s
 
 ## Architecture Overview
 
+## Architecture Overview
+
 The stack is designed to provide Zero Trust principles at multiple layers:
+
+```mermaid
+graph TD
+    User((User)) -->|HTTPS| Ingress[Traefik Ingress]
+    Ingress -->|Auth Request| Authentik[Authentik IdP]
+    Authentik -->|Allow/Deny| Ingress
+    Ingress -->|Traffic| Service[Application Service]
+    
+    subgraph "Workload Identity (SPIRE)"
+    SpireServer[SPIRE Server] <-->|Attestation| SpireAgent[SPIRE Agent]
+    SpireAgent -->|Issue SVID| Service
+    end
+    
+    subgraph "Runtime Security (Tetragon)"
+    Tetragon[Tetragon] -->|eBPF Hooks| Kernel((Linux Kernel))
+    Kernel -->|Enforcement| Service
+    end
+```
 
 1.  **User Identity**: Managed by **Authentik**, providing SSO and centralized authentication for all ingress services.
 2.  **Workload Identity**: Managed by **SPIRE** (SPIFFE Runtime Environment), issuing short-lived X.509 certificates to workloads for mTLS and authentication.
@@ -12,6 +32,7 @@ The stack is designed to provide Zero Trust principles at multiple layers:
 
 ## Directory Structure
 
+*   `cluster/`: Bootstrap configurations and ArgoCD Application definitions (including Networking).
 *   `apps/`: User-facing applications (e.g., example apps).
 *   `infra/`: Infrastructure components (Cilium, SPIRE, Tetragon, ArgoCD).
 *   `security/`: Security-specific configurations (Authentik, Databases, Policies).
@@ -33,12 +54,32 @@ Located in: `infra/spire`
 
 SPIRE issues identities to workloads based on k8s selectors.
 *   **Trust Domain**: `homelab.internal`
+    *   **Note**: This is an separate internal logical identifier for SPIFFE IDs (e.g., `spiffe://homelab.internal/ns/default/sa/my-app`). It does **NOT** need to be a real DNS domain or public domain. It is an arbitrary string that defines the security boundary of the mesh.
 *   **Agent**: Runs as a DaemonSet on every node.
 *   **Server**: Central authority for minting SVIDs.
 
 **Key Features:**
 *   Automated certificate rotation (`rotation-config.yaml`).
 *   Workload attestation via Kubernetes projected service account tokens.
+
+```mermaid
+sequenceDiagram
+    participant W as Workload (Pod)
+    participant A as SPIRE Agent
+    participant S as SPIRE Server
+    participant K as K8s API
+
+    Note over W,A: Node Attestation
+    A->>S: Node Attestation Request
+    S->>K: Validate Node
+    S-->>A: Issue Agent SVID
+
+    Note over W,S: Workload Attestation
+    W->>A: Request SVID (Socket)
+    A->>K: Validate Pod Selector (SA, Labels)
+    A-->>W: Mint Workload SVID (X.509)
+    W->>W: Mount SVID to memory
+```
 
 ### Runtime Security (Tetragon)
 
@@ -47,6 +88,50 @@ Located in: `infra/tetragon`
 Tetragon provides deep visibility and enforcement.
 *   **Policies**: Defined in `security/policies/tetragon/block-shell.yaml`.
 *   **Enforcement**: Can sigkill processes that violate policies (e.g., unexpected shell execution).
+
+```mermaid
+flowchart LR
+    Policy[YAML Policy] -->|Apply| K8s[Kubernetes API]
+    K8s -->|Config| TetragonDaemon[Tetragon Daemon]
+    TetragonDaemon -->|Load| eBPF[eBPF Program]
+    
+    subgraph Kernel Space
+    eBPF -->|Hook| Syscall[sys_execve]
+    end
+    
+    subgraph User Space
+    Shell[bash] -->|Call| Syscall
+    end
+    
+    eBPF -- Match '/bin/sh' --> Kill[SIGKILL]
+    Kill -.-> Shell
+```
+
+### Remote Access (Netbird)
+
+Located in: `cluster/networking`
+
+Netbird provides a secure peer-to-peer overlay network for remote access.
+*   **Deployment**: Managed via ArgoCD (`cluster/networking/netbird.yaml`).
+*   **Integration**: Deployed to `networking` namespace.
+
+**Self-Hosted Architecture**:
+This deployment is fully self-hosted. It replaces the Netbird.io SaaS.
+*   **Management**: Stores configuration and peer state (Internal).
+*   **Signal**: Facilitates peer-to-peer connection negotiation (Internal).
+*   **Relay (TURN)**: Relays traffic when P2P fails (Internal/Coturn).
+*   **Dashboard**: Web UI for management (Internal).
+*   **External Dependency**: None (except for public DNS/Ingress as noted below).
+
+**Cloudflare Tunnel Integration (Hybrid)**:
+This stack supports using Cloudflare Tunnel (`infra/cloudflared`) to expose the HTTP/gRPC components without opening port 443.
+*   **Tunnel**: Exposes `netbird.yourdomain.com` (Management, Dashboard, Signal).
+*   **Port Forward (REQUIRED)**: You **MUST** still forward UDP Port 3478 (and the Coturn range) on your router to the cluster. Cloudflare Tunnel does not proxy UDP/STUN traffic efficiently for this use case.
+
+**Configuration Required**:
+You **MUST** configure your public domain in `cluster/networking/netbird.yaml`.
+*   **Real Domain Required**: Because this stack uses Let's Encrypt with HTTP-01 challenges (`acme-clusterissuer.yaml`), you cannot use a local domain (like `.local`). You must use a **real public domain** (e.g., `netbird.yourdomain.com`) that resolves to your cluster's Ingress/LoadBalancer IP.
+*   **How to Configure**: Edit `cluster/networking/netbird.yaml` and uncomment/update the `helm.values` section with your domain.
 
 ## Getting Started
 
