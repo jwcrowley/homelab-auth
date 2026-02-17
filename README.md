@@ -157,25 +157,48 @@ You **MUST** configure your public domain in `cluster/networking/netbird.yaml`.
 
 ### Prerequisites
 
-*   Kubernetes Cluster (k3s/Talos recommended for Cilium compatibility).
-*   Cilium installed as CNI.
-*   Helm & ArgoCD.
+This stack leverages advanced kernel features (eBPF) and GitOps patterns. Ensure your environment meets these requirements before proceeding.
+
+#### 1. Kubernetes Distribution
+We recommend distributions that allow disabling the default CNI to ensure **Cilium** has full control over the networking stack.
+
+*   **k3s**:
+    *   Must be installed with Flannel and Kube-Proxy disabled for maximum Cilium performance:
+        ```bash
+        curl -sfL https://get.k3s.io | sh -s - \
+          --flannel-backend=none \
+          --disable-kube-proxy \
+          --disable network-policy
+        ```
+*   **Talos Linux**:
+    *   Set `cluster.network.cni.name: none` in your machine configuration.
+    *   Required for full Tetragon compatibility and seamless eBPF integration.
+
+#### 2. Kernel Requirements
+Since **Tetragon** and **Cilium** operate at the eBPF layer, the underlying host kernel must support:
+*   **Version**: Linux Kernel **5.10+** (5.15+ recommended).
+*   **Config**: `CONFIG_DEBUG_INFO_BTF=y` (allows eBPF programs to understand kernel types).
+*   **Mounts**: BPF filesystem must be mounted (standard on modern distros).
+
+#### 3. Storage & Secrets
+*   **Storage**: A default storage class configured (e.g., Local Path Provisioner, Longhorn) for Postgres.
+*   **SOPS**: An age/PGP key for decrypting repository secrets.
+*   **Cloudflare**: A `cloudflared-token` in the `infra` namespace:
+    ```bash
+    kubectl create secret generic cloudflared-token --namespace infra --from-literal=token=<token>
+    ```
+
+#### 4. Required Tools
+Ensure the following are installed locally:
+*   **Helm 3.x**: For initial bootstrap of operators.
+*   **ArgoCD CLI**: To monitor the "App-of-Apps" sync status.
+*   `hubble` and `tetra` CLIs for deep visibility.
 
 ### Deployment Guide
 
 This stack is managed via a GitOps "App-of-Apps" pattern using ArgoCD.
 
-### 1. Prerequisites
-
-Before bootstrapping, ensure your cluster has:
-*   **CNI**: [Cilium](https://cilium.io/) installed and healthy (required for Tetragon).
-*   **Storage**: A default storage class configured (e.g., Local Path Provisioner, Longhorn) for Postgres.
-*   **Secrets**:
-    *   **SOPS**: An age/PGP key for decrypting repository secrets.
-    *   **Cloudflare**: A `cloudflared-token` in the `infra` namespace:
-      ```bash
-      kubectl create secret generic cloudflared-token --namespace infra --from-literal=token=<token>
-      ```
+### 1. Bootstrapping (Stage 1)
 
 ### 2. Bootstrapping (Stage 1)
 
