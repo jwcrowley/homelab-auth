@@ -1,0 +1,19 @@
+
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: block-shell-in-prod
+spec:
+  kprobes:
+    - call: "sys_execve"
+      syscall: true
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "/bin/sh"
+                - "/bin/bash"
+          matchNamespaces:
+            - namespace: apps
+      action: Post

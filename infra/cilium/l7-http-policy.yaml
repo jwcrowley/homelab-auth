@@ -1,0 +1,22 @@
+
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-authentik-http
+  namespace: apps
+spec:
+  endpointSelector:
+    matchLabels:
+      app: authentik
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: envoy-gateway
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/"

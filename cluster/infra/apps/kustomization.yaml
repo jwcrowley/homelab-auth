@@ -1,0 +1,4 @@
+resources:
+- external-secrets.yaml
+- cloudnative-pg.yaml
+- cert-manager.yaml

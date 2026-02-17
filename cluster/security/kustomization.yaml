@@ -1,0 +1,4 @@
+resources:
+- database.yaml
+- authentik.yaml
+- networkpolicy.yaml

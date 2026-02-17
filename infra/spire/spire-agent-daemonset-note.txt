@@ -1,0 +1,11 @@
+
+SPIRE Agent automatically rotates SVIDs (X.509 certs).
+
+Rotation defaults:
+- SVID TTL: 1 hour
+- Automatic renewal before expiry
+- No application restart required (if using SDS or projected volume)
+
+For Envoy Gateway integration:
+- Enable SDS in Envoy
+- Point to SPIRE Agent workload API socket

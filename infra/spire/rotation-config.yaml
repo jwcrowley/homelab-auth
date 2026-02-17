@@ -1,0 +1,23 @@
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server-config
+  namespace: spire-system
+data:
+  server.conf: |
+    server {
+      bind_address = "0.0.0.0"
+      bind_port = "8081"
+      # TRUST DOMAIN: Must match the trust_domain in agent.conf and workload registration
+      trust_domain = "homelab.internal"
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      ca_subject = {
+        country = ["US"]
+        organization = ["Homelab"]
+        common_name = "Homelab SPIRE CA"
+      }
+      ca_ttl = "24h"
+      default_svid_ttl = "1h"
+    }

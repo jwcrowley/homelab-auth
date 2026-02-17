@@ -1,0 +1,12 @@
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: authentik-db
+  namespace: infra
+spec:
+  instances: 2
+  certificates:
+    serverTLSSecret: spire-issued-postgres-cert
+  storage:
+    size: 10Gi

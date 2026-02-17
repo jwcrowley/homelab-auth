@@ -1,0 +1,10 @@
+
+apiVersion: spire.spiffe.io/v1alpha1
+kind: ClusterSPIFFEID
+metadata:
+  name: postgres-spiffe-id
+spec:
+  spiffeIDTemplate: spiffe://homelab.internal/ns/infra/sa/postgres
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: authentik-db

@@ -1,0 +1,5 @@
+resources:
+- infra
+- security
+- networking
+- apps

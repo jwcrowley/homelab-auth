@@ -1,0 +1,27 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spiffe-enabled-app
+  namespace: apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spiffe-enabled
+  template:
+    metadata:
+      labels:
+        app: spiffe-enabled
+    spec:
+      serviceAccountName: spiffe-app
+      containers:
+        - name: app
+          image: nginx
+          volumeMounts:
+            - name: spiffe-svid
+              mountPath: /run/spire/sockets
+      volumes:
+        - name: spiffe-svid
+          hostPath:
+            path: /run/spire/sockets
