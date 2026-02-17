@@ -230,8 +230,6 @@ This stack is managed via a GitOps "App-of-Apps" pattern using ArgoCD.
 
 ### 1. Bootstrapping (Stage 1)
 
-### 2. Bootstrapping (Stage 1)
-
 Apply the foundational namespaces and the root ArgoCD application:
 
 ```bash
@@ -247,7 +245,7 @@ This will automatically deploy:
 *   `cloudnative-pg` (Postgres operator)
 *   `external-secrets` (if using vault/asm/etc.)
 
-### 3. Deploying the Stack (Stage 2)
+### 2. Deploying the Stack (Stage 2)
 
 Once the core infrastructure is healthy, apply the remaining stack layers:
 
@@ -262,7 +260,7 @@ kubectl apply -k cluster/security/
 kubectl apply -k cluster/networking/
 ```
 
-### 4. Post-Deployment Configuration
+### 3. Post-Deployment Configuration
 
 1.  **Netbird Domain**: Edit `cluster/networking/netbird.yaml` and set your public domain.
 2.  **Hybrid Networking**: Forward UDP Port `3478` on your router to the cluster LoadBalancer IP for Netbird Relay performance.
