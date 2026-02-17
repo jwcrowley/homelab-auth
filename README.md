@@ -279,6 +279,54 @@ To protect a new internal service with SSO, follow these steps:
       traefik.ingress.kubernetes.io/router.middlewares: security-authentik-sso@kubernetescrd
     ```
 
+## Observability & Visibility
+
+This stack provides deep visibility into the cluster's lifecycle, from network flows to process execution.
+
+### Observability Pipeline
+
+```mermaid
+graph LR
+    Kernel((Linux Kernel)) -->|eBPF Events| Tetragon[Tetragon]
+    Kernel -->|Flow logs| Cilium[Cilium/Hubble]
+    
+    Tetragon -->|JSON/CLI| SecAdmin[Security Admin]
+    Cilium -->|Hubble UI/CLI| NetAdmin[Network Admin]
+    
+    Authentik[Authentik IdP] -->|Audit Logs| AuthAdmin[Identity Admin]
+    Spire[SPIRE Server] -->|SVID State| IdentityAdmin[Workload Identity Admin]
+```
+
+### 1. Network Visibility (Hubble)
+Hubble provides L3/L4 and L7 visibility for all pod traffic.
+*   **Hubble UI**: Accessible via `http://localhost:12000` after port-forwarding:
+    ```bash
+    kubectl port-forward -n kube-system svc/hubble-ui 12000:80
+    ```
+*   **Hubble CLI**: Watch live traffic flows:
+    ```bash
+    hubble observe --follow --namespace apps
+    ```
+
+### 2. Runtime Security Visibility (Tetragon)
+Tetragon monitors syscalls and process execution across the cluster.
+*   **Live Events**: Stream JSON events or use the `tetra` CLI:
+    ```bash
+    kubectl logs -n kube-system -l app.kubernetes.io/name=tetragon -c export-stdout -f | tetra observe
+    ```
+
+### 3. Identity Visibility (Authentik & SPIRE)
+*   **User Audit**: Authentik logs every login, token issuance, and policy evaluation. View these in the **Authentik Admin Interface** under `Events -> Log`.
+*   **Workload Identities**: Check which pods have valid SPIRE identities:
+    ```bash
+    kubectl exec -irn spire-system spire-server-0 -- \
+      bin/spire-server entry show
+    ```
+
+### 4. GitOps Visibility (ArgoCD)
+Track the deployment state and health of the entire stack:
+*   **ArgoCD UI**: Use the ArgoCD dashboard to see real-time diffs and sync status for all applications in the `cluster/` directory.
+
 ## Usage Guides
 
 ### Onboarding a Service to SPIRE
