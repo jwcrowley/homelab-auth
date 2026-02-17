@@ -11,8 +11,6 @@ This stack is built on three core pillars:
 
 ## Architecture Overview
 
-## Architecture Overview
-
 The stack is designed to provide Zero Trust principles at multiple layers:
 
 ```mermaid
