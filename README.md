@@ -223,6 +223,62 @@ kubectl get pods -A
 kubectl get tracingpolicy -A
 ```
 
+## SSO Integration Guide
+
+This stack leverages **Authentik** as a central Identity Provider (IdP) to provide Single Sign-On (SSO) for internal applications.
+
+### SSO Flow (ForwardAuth)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant T as Traefik Ingress
+    participant A as Authentik Outpost
+    participant S as App Service
+
+    U->>T: Request https://myapp.example.com
+    T->>A: ForwardAuth Request
+    alt Session Valid
+        A-->>T: 200 OK + User Headers
+        T->>S: Forward Request
+        S-->>U: App Content
+    else Session Invalid
+        A-->>T: 401 Unauthorized / Redirect
+        T-->>U: Redirect to Authentik Login
+        U->>A: Login (OIDC/LDAP/MFA)
+        A-->>U: Set Session Cookie + Redirect back
+    end
+```
+
+### How to Onboard an Application
+
+To protect a new internal service with SSO, follow these steps:
+
+1.  **Create Provider**: In the Authentik UI, go to `Resources -> Providers` and create a **Proxy Provider**.
+    *   **Authorization flow**: default-provider-authorization-implicit-consent
+    *   **External host**: `https://myapp.example.com`
+2.  **Create Application**: Go to `Resources -> Applications` and create an application linked to the Provider.
+3.  **Define Middleware (Traefik)**: Ensure a `Middleware` resource exists in Kubernetes pointing to your Authentik Outpost:
+    ```yaml
+    apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: authentik-sso
+      namespace: security
+    spec:
+      forwardAuth:
+        address: http://authentik-outpost-embedded.security.svc.cluster.local:9000/outpost.goauthentik.io/auth/traefik
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-authentik-username
+          - X-authentik-groups
+    ```
+4.  **Protect the Ingress**: Add the middleware annotation to your application's Ingress:
+    ```yaml
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: security-authentik-sso@kubernetescrd
+    ```
+
 ## Usage Guides
 
 ### Onboarding a Service to SPIRE
