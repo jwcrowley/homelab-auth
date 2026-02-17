@@ -223,11 +223,44 @@ kubectl get pods -A
 kubectl get tracingpolicy -A
 ```
 
-## SSO Integration Guide
+## Identity & SSO Architecture
 
-This stack leverages **Authentik** as a central Identity Provider (IdP) to provide Single Sign-On (SSO) for internal applications.
+This stack provides a dual-pillared identity system designed for Zero Trust: **User Identity** for humans and **Workload Identity** for machines.
 
-### SSO Flow (ForwardAuth)
+### The Two Pillars of Identity
+
+```mermaid
+graph TD
+    subgraph "User Identity (Authentik)"
+    Human((Human User)) -->|Login/MFA| IdP[Authentik Server]
+    IdP -->|Session Cookie| Browser[Web Browser]
+    Browser -->|ForwardAuth| Outpost[Authentik Outpost]
+    Outpost -->|Allow/Deny| App[Internal App]
+    end
+
+    subgraph "Workload Identity (SPIRE)"
+    App -->|Socket Auth| Agent[SPIRE Agent]
+    Agent -->|Issue SVID| App
+    App -->|mTLS| DB[(Postgres/Service)]
+    end
+    
+    Human -.->|Human-to-Machine| App
+    App -.->|Machine-to-Machine| DB
+```
+
+| Feature | User Identity (Authentik) | Workload Identity (SPIRE) |
+| :--- | :--- | :--- |
+| **Identity For** | Humans (Users/Admins) | Machines (Pods/Services) |
+| **Credential** | Session Cookies / JWTs | X.509 SVIDs / mTLS |
+| **Source of Truth**| LDAP / Database / Social | Kubernetes API / Node Attestation |
+| **Life Span** | Hours/Days (User Session) | Minutes/Hours (Short-lived certs) |
+
+---
+
+### Understanding the SSO Flows
+
+#### 1. Proxy Flow (ForwardAuth)
+Used for applications that **do not** natively support OIDC/SAML. The Ingress Controller acts as a gatekeeper.
 
 ```mermaid
 sequenceDiagram
@@ -249,6 +282,33 @@ sequenceDiagram
         A-->>U: Set Session Cookie + Redirect back
     end
 ```
+
+*   **Mechanism**: Traefik intercepts the request and asks the **Authentik Outpost** if the user is authenticated.
+*   **Best For**: Legacy apps, dashboards, or anything without a login button.
+
+#### 2. Native Flow (OIDC)
+Used for applications that **do** support OIDC (e.g., Netbird, Grafana).
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant App as App (Netbird)
+    participant Auth as Authentik
+
+    U->>App: Click 'Login with Authentik'
+    App->>U: Redirect to Authentik
+    U->>Auth: Authenticate (MFA)
+    Auth->>U: Redirect to App + Code
+    U->>App: Send Auth Code
+    App->>Auth: Exchange Code for Token
+    Auth-->>App: Access Token / User Info
+    App-->>U: Grant Access
+```
+
+*   **Mechanism**: The app directly redirects to Authentik via standard OpenID Connect protocols.
+*   **Best For**: Netbird, modern web apps, and any service requiring granular group/role sync.
+
+---
 
 ### How to Onboard an Application
 
