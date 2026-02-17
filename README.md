@@ -124,9 +124,29 @@ This deployment is fully self-hosted. It replaces the Netbird.io SaaS.
 *   **External Dependency**: None (except for public DNS/Ingress as noted below).
 
 **Cloudflare Tunnel Integration (Hybrid)**:
-This stack supports using Cloudflare Tunnel (`infra/cloudflared`) to expose the HTTP/gRPC components without opening port 443.
-*   **Tunnel**: Exposes `netbird.yourdomain.com` (Management, Dashboard, Signal).
-*   **Port Forward (REQUIRED)**: You **MUST** still forward UDP Port 3478 (and the Coturn range) on your router to the cluster. Cloudflare Tunnel does not proxy UDP/STUN traffic efficiently for this use case.
+
+To maximize both security and performance, this stack uses a **Hybrid Networking** model.
+
+```mermaid
+graph TD
+    Peer((Remote Peer)) --> Router[Your Router]
+    
+    subgraph "Secure Entry (TCP)"
+    Router -->|Tunnel:443| CFTunnel[Cloudflare Tunnel]
+    CFTunnel -->|Proxy| Ingress[Traefik Ingress]
+    Ingress -->|Mgmt/Signal| NetbirdAPI[Netbird Components]
+    end
+    
+    subgraph "High-Speed Data (UDP)"
+    Router -->|Port Forward:3478| Coturn[Netbird Relay / Coturn]
+    end
+    
+    Peer -.->|Auth & Signaling| CFTunnel
+    Peer -.->|VPN Traffic Relay| Coturn
+```
+
+*   **Management Plane (Cloudflare Tunnel)**: All control traffic (Dashboard, Management API, and gRPC Signal) goes through the Cloudflare Tunnel. This hides your public IP and provides DDoS protection for the "brains" of the network.
+*   **Data Plane (UDP Port Forwarding)**: Netbird uses WireGuard for peer-to-peer traffic. If peers cannot connect directly, they use the **Relay (TURN)** server. This server uses UDP port 3478. Because Cloudflare Tunnel (standard) does not support UDP traffic with the performance required for a VPN, you **MUST** forward UDP port 3478 on your router directly to the cluster. This ensures your VPN remains fast and reliable.
 
 **Configuration Required**:
 You **MUST** configure your public domain in `cluster/networking/netbird.yaml`.
