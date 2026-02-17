@@ -11,6 +11,8 @@ This stack is built on three core pillars:
 
 ## Architecture Overview
 
+### 1. System Context
+
 The stack is designed to provide Zero Trust principles at multiple layers:
 
 ```mermaid
@@ -29,6 +31,58 @@ graph TD
     Tetragon[Tetragon] -->|eBPF Hooks| Kernel((Linux Kernel))
     Kernel -->|Enforcement| Service
     end
+```
+
+### 2. Pod-Level Architecture
+
+Detailed view of pod interactions across namespaces:
+
+```mermaid
+graph LR
+    subgraph "External"
+        U((User))
+        CF[Cloudflare Edge]
+    end
+
+    subgraph "kube-system"
+        T[Traefik Ingress Pod]
+        C[Cilium CNI]
+    end
+
+    subgraph "networking"
+        NB[Netbird Pods]
+    end
+
+    subgraph "security"
+        A[Authentik Server]
+        AW[Authentik Worker]
+        DB[(Postgres HA Cluster)]
+    end
+
+    subgraph "infra"
+        S_S[SPIRE Server]
+        S_A[SPIRE Agent]
+        TN[Tetragon Agent]
+        CLD[cloudflared Pod]
+    end
+
+    %% Ingress Path
+    U --> CF
+    CF <-->|Tunnel| CLD
+    CLD --> T
+    T --> NB
+    T --> A
+
+    %% Auth Path
+    T <-->|ForwardAuth| A
+    A <--> DB
+    AW <--> DB
+
+    %% Identity & Security
+    S_S <--> S_A
+    S_A -->|SVID| A
+    S_A -->|SVID| NB
+    TN -->|eBPF| C
 ```
 
 1.  **User Identity**: Managed by **Authentik**, providing SSO and centralized authentication for all ingress services.
